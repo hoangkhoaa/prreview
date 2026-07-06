@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>prreview</title>
+<style>
+  :root {
+    --paper: #F7F6F2; --card: #FFFFFF; --ink: #16181D; --dim: #70747B;
+    --line: #E4E2DA; --line2: #D6D4CA;
+    --pen: #C2402F; --approve: #22713F; --amber: #A66A12; --blue: #2B5FAF;
+    --wash-red: #FBEEEB; --wash-green: #EDF5EF; --wash-amber: #FAF2E2;
+    --wash-blue: #EEF3FB; --wash-gray: #EFEEE9;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { background: var(--paper); color: var(--ink); font: 14px/1.55 var(--sans); }
+  button { font: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+
+  .topbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: nowrap;
+    padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--card);
+    min-height: 44px;
+  }
+  .wordmark { font: 700 17px var(--mono); letter-spacing: -0.02em; flex: none; }
+  .wordmark::after { content: "_"; color: var(--pen); animation: blink 1.2s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .topbar .user { font: 12px var(--mono); color: var(--dim); flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+  .topbar .spacer { flex: 1; min-width: 8px; }
+  .modelchip {
+    font: 12px var(--mono); color: var(--ink); background: var(--wash-gray);
+    border: 1px solid var(--line2); border-radius: 6px; padding: 4px 10px;
+    max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none;
+  }
+  select {
+    background: var(--card); color: var(--ink); border: 1px solid var(--line2);
+    border-radius: 6px; padding: 6px 8px; font: 12px var(--mono);
+  }
+  .tbtn {
+    background: var(--card); color: var(--dim); border: 1px solid var(--line2);
+    border-radius: 6px; padding: 6px 10px; font: 12px var(--mono);
+  }
+  .tbtn:hover { color: var(--ink); border-color: var(--dim); }
+  .tbtn.off { color: var(--pen); border-color: var(--pen); }
+  .tbtn.off:hover { background: var(--wash-red); color: var(--pen); }
+  .halted { position: fixed; inset: 0; background: var(--paper); z-index: 50; display: none;
+    align-items: center; justify-content: center; text-align: center; }
+  .halted.show { display: flex; }
+  .halted .box { max-width: 440px; padding: 20px; }
+  .halted .stamp { font-size: 15px; margin-bottom: 18px; }
+  .halted p { color: var(--dim); font-size: 13.5px; }
+  .halted code { font: 12px var(--mono); background: var(--wash-gray); padding: 2px 6px; border-radius: 4px; }
+  .toggle { display: flex; align-items: center; gap: 6px; font: 12px var(--mono); color: var(--dim);
+    border: 1px solid var(--line2); border-radius: 6px; padding: 6px 10px; cursor: pointer; user-select: none; background: var(--card); }
+  .toggle input { accent-color: var(--pen); margin: 0; }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 34px 24px 80px; }
+
+  .eyebrow { font: 600 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin-bottom: 10px; }
+  .submit { display: flex; gap: 10px; margin-bottom: 8px; }
+  .submit input {
+    flex: 1; background: var(--card); border: 1px solid var(--line2); color: var(--ink);
+    border-radius: 8px; padding: 13px 15px; font: 13px var(--mono);
+  }
+  .submit input::placeholder { color: #A7AAA1; }
+  .submit input:focus { outline: none; border-color: var(--ink); }
+  .btn {
+    background: var(--ink); color: var(--paper); font-weight: 600; border: 1px solid var(--ink);
+    border-radius: 8px; padding: 0 22px; font-size: 14px;
+  }
+  .btn:hover { background: #000; }
+  .watchinfo { font: 12px var(--mono); color: var(--dim); min-height: 18px; margin-bottom: 30px; }
+  .watchinfo .err { color: var(--pen); }
+
+  .seclabel { display: flex; align-items: baseline; gap: 12px; margin: 0 0 12px; }
+  .seclabel .t { font: 600 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); white-space: nowrap; }
+  .seclabel .rule { flex: 1; border-top: 1px solid var(--line); transform: translateY(-3px); }
+
+  .job {
+    background: var(--card); border: 1px solid var(--line); border-left-width: 3px;
+    border-radius: 8px; padding: 13px 16px 13px 15px; margin-bottom: 10px;
+  }
+  .job.running  { border-left-color: var(--blue); }
+  .job.queued   { border-left-color: var(--line2); }
+  .job.awaiting { border-left-color: var(--amber); }
+  .job.posted   { border-left-color: var(--approve); }
+  .job.failed   { border-left-color: var(--pen); }
+  .job.canceled, .job.skipped { border-left-color: var(--line2); }
+
+  .job .row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .status { font: 700 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; }
+  .status.queued   { color: var(--dim); background: var(--wash-gray); }
+  .status.running  { color: var(--blue); background: var(--wash-blue); }
+  .status.awaiting { color: var(--amber); background: var(--wash-amber); }
+  .status.posted   { color: var(--approve); background: var(--wash-green); }
+  .status.failed   { color: var(--pen); background: var(--wash-red); }
+  .status.canceled, .status.skipped { color: var(--dim); background: var(--wash-gray); }
+
+  .job a.pr { color: var(--ink); font: 600 13px var(--mono); text-decoration: none; border-bottom: 1px solid var(--line2); }
+  .job a.pr:hover { border-color: var(--ink); }
+  .job .title { color: var(--ink); }
+  .job .meta { color: var(--dim); font-size: 12px; }
+  .job .meta .add { color: var(--approve); } .job .meta .del { color: var(--pen); }
+  .job .actions { margin-left: auto; display: flex; gap: 6px; }
+  .job .actions .tbtn { padding: 3px 9px; font-size: 11px; }
+  .stage { color: var(--dim); font: 12px var(--mono); margin-top: 7px; }
+  .stage.err { color: var(--pen); font-family: var(--sans); }
+  .cursorblock { display: inline-block; width: 7px; height: 12px; background: var(--blue);
+    vertical-align: -1px; margin-right: 6px; animation: blink 1s steps(1) infinite; }
+
+  .detail { margin-top: 12px; border-top: 1px dashed var(--line2); padding-top: 14px; }
+  .summary { color: var(--ink); font-size: 13.5px; padding: 2px 2px 12px; white-space: pre-wrap; }
+  .finding { display: flex; gap: 12px; padding: 9px 2px 9px 12px; border-left: 2px solid var(--pen); margin: 0 0 8px; background: linear-gradient(to right, var(--wash-red), transparent 70%); border-radius: 2px; }
+  .finding.minor, .finding.nit { border-left-color: var(--line2); background: none; }
+  .sev { font: 700 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; min-width: 64px; padding-top: 2px; }
+  .sev.critical { color: var(--pen); } .sev.major { color: var(--amber); }
+  .sev.minor { color: var(--dim); } .sev.nit { color: var(--dim); }
+  .floc { font: 12px var(--mono); color: var(--blue); }
+  .fconf { font: 11px var(--mono); color: var(--dim); }
+  .fbody { font-size: 13px; margin-top: 2px; }
+  .pipeline { font: 11px var(--mono); color: var(--dim); margin: 4px 0 0; }
+
+  .decide { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .decide .lbl { font: 600 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+  .vbtn { border-radius: 6px; padding: 8px 16px; font-weight: 600; font-size: 13px; border: 1.5px solid; background: var(--card); }
+  .vbtn.approve { color: var(--approve); border-color: var(--approve); }
+  .vbtn.approve:hover { background: var(--wash-green); }
+  .vbtn.changes { color: var(--pen); border-color: var(--pen); }
+  .vbtn.changes:hover { background: var(--wash-red); }
+  .vbtn.comment { color: var(--ink); border-color: var(--line2); }
+  .vbtn.comment:hover { border-color: var(--ink); }
+  .decide .rec { font: 11px var(--mono); color: var(--dim); }
+
+  .stamp {
+    display: inline-block; font: 800 12px var(--mono); letter-spacing: .18em; text-transform: uppercase;
+    padding: 5px 12px; border: 2.5px double; border-radius: 4px; transform: rotate(-2.5deg);
+    animation: stampin .28s cubic-bezier(.2,1.6,.5,1); margin: 10px 0 2px;
+  }
+  .stamp.approved { color: var(--approve); border-color: var(--approve); background: var(--wash-green); }
+  .stamp.changes  { color: var(--pen); border-color: var(--pen); background: var(--wash-red); }
+  .stamp.commented{ color: var(--blue); border-color: var(--blue); background: var(--wash-blue); }
+  @keyframes stampin { from { transform: rotate(-2.5deg) scale(1.5); opacity: 0; } to { transform: rotate(-2.5deg) scale(1); opacity: 1; } }
+
+  .empty { color: var(--dim); text-align: center; padding: 70px 0; font: 13px var(--mono); }
+
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tab { background: none; border: 0; border-radius: 5px; padding: 3px 10px;
+    font: 600 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .tab:hover { color: var(--ink); }
+  .tab.on { background: var(--ink); color: var(--paper); }
+  .tab .n { opacity: .65; margin-left: 4px; }
+  .pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 16px; font: 12px var(--mono); color: var(--dim); }
+  .pager button { background: var(--card); border: 1px solid var(--line2); border-radius: 6px; padding: 4px 12px; font: 12px var(--mono); color: var(--ink); }
+  .pager button:disabled { opacity: .35; cursor: default; }
+
+  .mrow { display: flex; gap: 8px; }
+  .mrow input { flex: 1; }
+  .mlist { display: none; margin-top: 8px; border: 1px solid var(--line); border-radius: 7px; max-height: 180px; overflow-y: auto; }
+  .mlist.show { display: block; }
+  .mlist label { display: flex; align-items: center; gap: 8px; margin: 0; padding: 7px 11px; font: 12px var(--mono); color: var(--ink);
+    text-transform: none; letter-spacing: 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .mlist label:last-child { border-bottom: 0; }
+  .mlist label:hover { background: var(--wash-gray); }
+  .mlist input { width: auto; accent-color: var(--ink); }
+  .modal textarea { width: 100%; background: var(--card); border: 1px solid var(--line2); color: var(--ink);
+    border-radius: 7px; padding: 9px 11px; font: 12px var(--mono); min-height: 96px; resize: vertical; }
+  .modal textarea:focus { outline: none; border-color: var(--ink); }
+
+  .toast { position: fixed; bottom: 22px; right: 22px; background: var(--ink); color: var(--paper);
+    border-radius: 8px; padding: 11px 16px; opacity: 0; transition: opacity .25s; max-width: 420px; font-size: 13px; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .toast.err { background: var(--pen); }
+
+  .overlay { position: fixed; inset: 0; background: rgba(22,24,29,.45); display: none;
+    align-items: flex-start; justify-content: center; z-index: 10; padding: 7vh 20px; overflow-y: auto; }
+  .overlay.show { display: flex; }
+  #settingsov.overlay { z-index: 11; }
+  #wfilters.overlay { z-index: 20; }
+  #setup.overlay { z-index: 30; }
+  .modal { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 30px 32px; width: 480px; max-width: 100%; box-shadow: 0 18px 50px rgba(22,24,29,.12); }
+  .modal.modal-wide { width: 520px; }
+  .modal .sect { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .modal .sect:first-of-type { margin-top: 0; padding-top: 0; border-top: 0; }
+  .modal .mrow select { flex: 1; width: auto; }
+  .modal h2 { font: 700 17px var(--mono); margin-bottom: 6px; }
+  .modal .sub { color: var(--dim); font-size: 13px; margin-bottom: 20px; }
+  .modal .sub code { font: 11px var(--mono); background: var(--wash-gray); padding: 1px 5px; border-radius: 4px; }
+  .modal label { display: block; font: 600 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin: 15px 0 5px; }
+  .modal input, .modal select { width: 100%; background: var(--card); border: 1px solid var(--line2);
+    color: var(--ink); border-radius: 7px; padding: 9px 11px; font: 13px var(--mono); }
+  .modal input:focus, .modal select:focus { outline: none; border-color: var(--ink); }
+  .modal .hint { font-size: 11.5px; color: var(--dim); margin-top: 4px; }
+  .modal .btns { display: flex; gap: 10px; margin-top: 24px; }
+  .modal .btns .btn { padding: 10px 18px; }
+  .modal .btns .tbtn { padding: 10px 14px; font-size: 13px; }
+  .seg { display: flex; border: 1px solid var(--line2); border-radius: 7px; overflow: hidden; }
+  .seg button { flex: 1; background: var(--card); color: var(--dim); border: 0; padding: 9px 0; font: 12px var(--mono); }
+  .seg button + button { border-left: 1px solid var(--line2); }
+  .seg button.on { background: var(--ink); color: var(--paper); font-weight: 700; }
+
+  /* checklist rows & inline toggles inside modals — undo the .modal label
+     uppercase/block treatment (this block must come after the modal CSS) */
+  .modal .mlist label {
+    display: flex; align-items: center; gap: 9px; margin: 0; padding: 8px 11px;
+    font: 12px var(--mono); color: var(--ink); text-transform: none; letter-spacing: 0;
+    border-bottom: 1px solid var(--line); cursor: pointer;
+  }
+  .modal .mlist label:last-child { border-bottom: 0; }
+  .modal .mlist input[type=checkbox] { width: auto; margin: 0; accent-color: var(--ink); }
+  .modal label.toggle {
+    display: inline-flex; align-items: center; gap: 8px; margin: 2px 0 0;
+    font: 12px var(--mono); color: var(--ink); text-transform: none; letter-spacing: 0;
+    border: 1px solid var(--line2); border-radius: 7px; padding: 8px 11px; cursor: pointer;
+  }
+  .modal label.toggle input { width: auto; margin: 0; }
+  .modal .mlist .tbtn { text-transform: none; letter-spacing: 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wordmark::after, .cursorblock { animation: none; }
+    .stamp { animation: none; }
+  }
+  @media (max-width: 640px) {
+    .topbar { padding: 10px 14px; gap: 8px; }
+    .topbar .user { display: none; }
+    .modelchip { max-width: 120px; }
+    .wrap { padding: 24px 14px 60px; }
+    .submit { flex-direction: column; }
+    .btn { padding: 12px; }
+    .job .actions { margin-left: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="wordmark">prreview</span>
+    <span class="user" id="user"></span>
+    <span class="spacer"></span>
+    <span class="modelchip" id="modelchip" title="active model">—</span>
+    <button class="tbtn" id="settingsbtn" title="model, watch, queue settings">settings</button>
+    <button class="tbtn off" id="offbtn" title="hard stop: cancel everything and shut the engine down">⏻ off</button>
+  </div>
+
+<div class="wrap">
+  <div class="eyebrow">Review a pull request</div>
+  <form class="submit" id="form">
+    <input id="url" placeholder="https://github.com/org/repo/pull/123" autocomplete="off" spellcheck="false">
+    <button type="submit" class="btn">Review</button>
+  </form>
+  <div class="watchinfo" id="watchinfo"></div>
+
+  <div class="seclabel" id="jobshead" style="display:none">
+    <span class="t" id="jobscount"></span>
+    <span class="rule"></span>
+    <span class="tabs" id="tabs"></span>
+  </div>
+  <div id="jobs"></div>
+  <div class="empty" id="empty">nothing under review — paste a PR URL, or turn on watch</div>
+  <div class="pager" id="pager" style="display:none">
+    <button id="prevpg">‹ prev</button>
+    <span id="pginfo"></span>
+    <button id="nextpg">next ›</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="halted" id="halted">
+  <div class="box">
+    <span class="stamp changes">Engine stopped</span>
+    <p>Everything was cancelled: running reviews, the queue, watch polling, and the watch daemon. Nothing will be posted to GitHub.</p>
+    <p style="margin-top:10px">Run <code>prreview serve</code> to start again.</p>
+  </div>
+</div>
+
+<div class="overlay" id="wfilters">
+  <div class="modal">
+    <h2>Watch filters</h2>
+    <div class="sub">Controls which PRs auto-watch picks up. Manually pasted URLs always review directly, regardless of these filters.</div>
+
+    <label>Review requests</label>
+    <label class="toggle" style="display:inline-flex"><input type="checkbox" id="wf_teams"> include team requests (default: only direct requests to you)</label>
+
+    <label>Repo whitelist</label>
+    <input id="wf_search" placeholder="search your repos…" autocomplete="off" spellcheck="false">
+    <div class="mlist show" id="wf_list" style="max-height:220px"><label style="cursor:default">loading repos…</label></div>
+    <div class="mrow" style="margin-top:8px">
+      <input id="wf_manual" placeholder="owner/repo — add one not in the list" autocomplete="off" spellcheck="false">
+      <button type="button" class="tbtn" id="wf_add">Add</button>
+    </div>
+    <div class="hint">Nothing checked = watch all repos. Checked = only these repos are auto-queued.</div>
+
+    <div class="btns">
+      <button class="btn" id="wf_save">Save filters</button>
+      <button class="tbtn" id="wf_cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="settingsov">
+  <div class="modal modal-wide">
+    <h2>Settings</h2>
+    <div class="sub">Model, watch, and queue controls. Click ● to set the default profile.</div>
+
+    <div class="sect">
+      <label>Active model</label>
+      <div class="mrow">
+        <select id="model" title="model profile"></select>
+        <button type="button" class="tbtn" id="testmodel" title="test the selected model">test</button>
+      </div>
+      <label>Review depth</label>
+      <select id="depth" title="review depth">
+        <option value="fast">fast — 1 pass</option>
+        <option value="standard">standard — 2 lenses</option>
+        <option value="max">max — 4 lenses</option>
+      </select>
+    </div>
+
+    <div class="sect">
+      <label>Watch</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+        <label class="toggle"><input type="checkbox" id="watch"> watch</label>
+        <label class="toggle"><input type="checkbox" id="autoapprove"> auto-approve</label>
+        <button type="button" class="tbtn" id="wfilterbtn" title="watch scope & repo whitelist">filters…</button>
+      </div>
+    </div>
+
+    <div class="sect">
+      <label>Model profiles</label>
+      <div class="mlist show" id="plist" style="max-height:220px"></div>
+      <div class="btns" style="margin-top:12px">
+        <button type="button" class="btn" id="st_add">+ Add model</button>
+      </div>
+    </div>
+
+    <div class="sect">
+      <label>Queue</label>
+      <button type="button" class="tbtn" id="purgebtn" title="clear the queue and finished rows (running & awaiting are kept)">purge finished &amp; queued</button>
+    </div>
+
+    <div class="btns">
+      <button type="button" class="tbtn" id="st_close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="setup">
+  <div class="modal">
+    <h2 id="setupTitle">Welcome to prreview</h2>
+    <div class="sub" id="setupSub">Connect a model to start reviewing pull requests. Everything stays local in <code>~/.config/prreview/config.json</code>.</div>
+
+    <label>Provider</label>
+    <div class="seg" id="providerSeg">
+      <button type="button" data-v="anthropic">Anthropic</button>
+      <button type="button" data-v="openai" class="on">OpenAI-compatible</button>
+    </div>
+    <div class="hint">OpenAI-compatible = self-hosted LLMs: vLLM, Ollama, LiteLLM, DeepSeek, …</div>
+
+    <label id="urlLabel">Base URL</label>
+    <input id="s_url" placeholder="https://llm.internal.example.com" autocomplete="off" spellcheck="false">
+    <div class="hint" id="urlHint">Your endpoint (with or without /v1).</div>
+
+    <label>API key</label>
+    <input id="s_key" type="password" placeholder="sk-..." autocomplete="off">
+    <div class="hint" id="keyHint"></div>
+
+    <label>Model ID</label>
+    <div class="mrow">
+      <input id="s_model" placeholder="deepseek-chat" autocomplete="off" spellcheck="false" list="modelOptions">
+      <button type="button" class="tbtn" id="s_load">Load models</button>
+    </div>
+    <datalist id="modelOptions"></datalist>
+    <div class="mlist" id="s_models"></div>
+    <div class="hint" id="s_models_hint" style="display:none">Tick several to add them all as profiles under this key.</div>
+
+    <label>Profile name</label>
+    <input id="s_name" placeholder="deepseek" autocomplete="off" spellcheck="false">
+    <div class="hint">A short name to switch models later.</div>
+
+    <label>Review depth</label>
+    <select id="s_depth">
+      <option value="fast">fast — 1 pass, cheapest</option>
+      <option value="standard">standard — 2 lenses + verification</option>
+      <option value="max" selected>max — 4 lenses + verification (best)</option>
+    </select>
+
+    <div class="btns">
+      <button class="btn" id="s_save">Save &amp; start reviewing</button>
+      <button class="tbtn" id="s_test">Test connection</button>
+      <button class="tbtn" id="s_cancel" style="display:none">Cancel</button>
+    </div>
+    <div class="hint" id="s_result" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const open = new Set();
+let userTouchedSettings = 0;
+
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.className = 'toast', 3500);
+}
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function esc(s) { return (s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function shortModel(name) {
+  if (!name) return '—';
+  const s = String(name);
+  const slash = s.lastIndexOf('/');
+  return slash >= 0 ? s.slice(slash + 1) : s;
+}
+
+function activeModelInfo(st) {
+  const models = (st.settings && st.settings.models) || [];
+  const active = models.find(m => m.default) || models[0];
+  if (active) return { name: active.name, model: active.model };
+  return { name: '', model: st.settings.activeModel || '—' };
+}
+
+function fmtDur(a, b) {
+  if (!a || a.startsWith('0001')) return '';
+  const end = (!b || b.startsWith('0001')) ? Date.now() : new Date(b).getTime();
+  const s = Math.max(0, Math.round((end - new Date(a).getTime()) / 1000));
+  return s < 60 ? s + 's' : Math.floor(s / 60) + 'm' + (s % 60) + 's';
+}
+
+function stampFor(posted) {
+  if (posted === 'APPROVE') return '<span class="stamp approved">Approved</span>';
+  if (posted === 'REQUEST_CHANGES') return '<span class="stamp changes">Changes requested</span>';
+  return '<span class="stamp commented">Commented</span>';
+}
+
+function findingHTML(f) {
+  return `<div class="finding ${esc(f.severity)}">
+    <span class="sev ${esc(f.severity)}">${esc(f.severity)}</span>
+    <div>
+      <span class="floc">${esc(f.path)}${f.line ? ':' + f.line : ''}</span>
+      <span class="fconf">${f.confidence ? f.confidence + '%' : ''}</span>
+      <div class="fbody">${esc(f.comment)}</div>
+    </div>
+  </div>`;
+}
+
+function jobHTML(j) {
+  const running = j.status === 'running' || j.status === 'queued';
+  const nfind = (j.findings || []).length;
+  const stats = j.changedFiles
+    ? `<span class="add">+${j.additions}</span> <span class="del">−${j.deletions}</span> · ${j.changedFiles} files` : '';
+  const own = j.ownPr ? ' <span class="meta">(your PR — comment only)</span>' : '';
+  const dur = fmtDur(j.startedAt, j.finishedAt);
+
+  let stage = '';
+  if (j.status === 'failed') stage = `<div class="stage err">✗ ${esc(j.error)}</div>`;
+  else if (j.status === 'running') stage = `<div class="stage"><span class="cursorblock"></span>${esc(j.stage)}</div>`;
+  else if (j.status === 'queued') stage = `<div class="stage">waiting for a free slot…</div>`;
+  else if (j.status === 'posted') stage = stampFor(j.posted) + (j.stage ? `<div class="stage">${esc(j.stage)}</div>` : '');
+  else if (j.status === 'awaiting') stage = `<div class="stage">${nfind ? nfind + ' findings — make the call below' : 'clean — make the call below'}</div>`;
+  else if (j.stage) stage = `<div class="stage">${esc(j.stage)}</div>`;
+
+  let actions = '';
+  if (running) actions = `<button class="tbtn" onclick="act(${j.id},'cancel')">cancel</button>`;
+  else actions = `<button class="tbtn" onclick="act(${j.id},'retry')">re-review</button>
+                  <button class="tbtn" onclick="removeJob(${j.id})">remove</button>`;
+  const toggle = (j.summary || nfind) ?
+    `<button class="tbtn" onclick="toggleDetail(${j.id})">${open.has(j.id) ? 'hide' : 'details'}</button>` : '';
+
+  let detail = '';
+  if (open.has(j.id)) {
+    const decide = j.status === 'awaiting' ? `
+      <div class="decide">
+        <span class="lbl">Verdict</span>
+        ${j.ownPr ? '' : `<button class="vbtn approve" onclick="post(${j.id},'APPROVE',${nfind})">Approve</button>
+        <button class="vbtn changes" onclick="post(${j.id},'REQUEST_CHANGES')">Request changes</button>`}
+        <button class="vbtn comment" onclick="post(${j.id},'COMMENT')">Comment</button>
+        <span class="rec">suggested: ${j.ownPr ? 'comment' : (nfind ? 'request changes' : 'approve')}</span>
+      </div>` : '';
+    detail = `<div class="detail">
+      ${j.summary ? `<div class="summary">${esc(j.summary)}</div>` : ''}
+      ${(j.findings || []).map(findingHTML).join('')}
+      ${j.candidates ? `<div class="pipeline">${j.files} files of context · ${j.candidates} candidates → ${nfind} confirmed</div>` : ''}
+      ${decide}
+    </div>`;
+  }
+
+  return `<div class="job ${j.status}">
+    <div class="row">
+      <span class="status ${j.status}">${j.status}</span>
+      <a class="pr" href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.key)}</a>
+      <span class="title">${esc(j.title)}</span>${own}
+      <span class="meta">${esc(j.author ? j.author : '')} ${stats ? '· ' + stats : ''} ${dur ? '· ' + dur : ''}</span>
+      <span class="actions">${toggle}${actions}</span>
+    </div>
+    ${stage}${detail}
+  </div>`;
+}
+
+// --- setup / onboarding modal ---
+let setupForced = false;
+let setupOpen = false;
+let provider = 'openai';
+
+function setProvider(v) {
+  provider = v;
+  document.querySelectorAll('#providerSeg button').forEach(b =>
+    b.classList.toggle('on', b.dataset.v === v));
+  $('urlHint').textContent = v === 'anthropic'
+    ? 'Optional — leave empty for api.anthropic.com.'
+    : 'Your endpoint (with or without /v1), e.g. https://llm.internal.example.com';
+  if (!$('s_model').value) $('s_model').placeholder = v === 'anthropic' ? 'claude-opus-4-8' : 'deepseek-chat';
+  if (!$('s_name').value) $('s_name').placeholder = v === 'anthropic' ? 'claude' : 'deepseek';
+}
+document.querySelectorAll('#providerSeg button').forEach(b =>
+  b.addEventListener('click', () => setProvider(b.dataset.v)));
+
+let editingName = '';
+
+function showSetup(forced, edit) {
+  setupForced = forced;
+  setupOpen = true;
+  editingName = edit ? edit.name : '';
+  $('setupTitle').textContent = forced ? 'Welcome to prreview'
+    : (edit ? 'Edit ' + edit.name : 'Add a model profile');
+  $('setupSub').style.display = forced ? 'block' : 'none';
+  $('s_cancel').style.display = forced ? 'none' : 'inline-block';
+  $('s_save').textContent = forced ? 'Save & start reviewing' : 'Save model';
+  // reset / prefill fields
+  setProvider(edit ? edit.provider : provider);
+  $('s_url').value = edit ? (edit.baseUrl || '') : '';
+  $('s_key').value = '';
+  $('keyHint').textContent = edit
+    ? (edit.hasKey ? 'Leave empty to keep the current key.' : 'This profile uses the global key; enter one to give it its own.')
+    : '';
+  $('s_model').value = edit ? edit.model : '';
+  $('s_name').value = edit ? edit.name : '';
+  $('s_name').disabled = !!edit;
+  $('s_models').classList.remove('show');
+  $('s_models').innerHTML = '';
+  $('s_models_hint').style.display = 'none';
+  $('s_result').textContent = '';
+  $('setup').classList.add('show');
+}
+function hideSetup() { setupOpen = false; editingName = ''; $('s_name').disabled = false; $('setup').classList.remove('show'); }
+
+$('s_cancel').addEventListener('click', hideSetup);
+
+// --- model discovery (one key -> many models) ---
+$('s_load').addEventListener('click', async () => {
+  const btn = $('s_load'), r = $('s_result');
+  btn.disabled = true; btn.textContent = 'Loading…';
+  r.style.color = ''; r.textContent = '';
+  try {
+    const res = await api('POST', '/api/models', {
+      name: $('s_name').value || $('s_name').placeholder,
+      provider,
+      baseUrl: $('s_url').value,
+      apiKey: $('s_key').value,
+    });
+    $('modelOptions').innerHTML = res.models.map(m => `<option value="${esc(m)}">`).join('');
+    $('s_models').innerHTML = res.models.map(m =>
+      `<label><input type="checkbox" value="${esc(m)}"> ${esc(m)}</label>`).join('');
+    $('s_models').classList.add('show');
+    $('s_models_hint').style.display = 'block';
+    r.style.color = 'var(--approve)';
+    r.textContent = `✓ ${res.models.length} models available — pick one, or tick several`;
+  } catch (err) {
+    r.style.color = 'var(--pen)';
+    r.textContent = '✗ ' + err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Load models';
+  }
+});
+
+$('s_models').addEventListener('change', () => {
+  const checked = [...$('s_models').querySelectorAll('input:checked')].map(i => i.value);
+  if (checked.length === 1) $('s_model').value = checked[0];
+  $('s_save').textContent = checked.length > 1
+    ? `Save ${checked.length} models`
+    : (setupForced ? 'Save & start reviewing' : 'Save model');
+});
+
+function checkedModels() {
+  return [...$('s_models').querySelectorAll('input:checked')].map(i => i.value);
+}
+
+$('s_test').addEventListener('click', async () => {
+  const r = $('s_result');
+  r.style.color = '';
+  r.textContent = 'Testing connection…';
+  $('s_test').disabled = true;
+  try {
+    const res = await api('POST', '/api/test', {
+      name: $('s_name').value || $('s_name').placeholder,
+      provider,
+      baseUrl: $('s_url').value,
+      apiKey: $('s_key').value,
+      model: $('s_model').value || $('s_model').placeholder,
+    });
+    r.style.color = res.ok ? 'var(--approve)' : 'var(--pen)';
+    r.textContent = (res.ok ? '✓ ' : '✗ ') + res.message;
+  } catch (err) {
+    r.style.color = 'var(--pen)';
+    r.textContent = '✗ ' + err.message;
+  } finally {
+    $('s_test').disabled = false;
+  }
+});
+
+$('testmodel').addEventListener('click', async () => {
+  const btn = $('testmodel');
+  btn.disabled = true;
+  btn.textContent = 'testing…';
+  try {
+    const res = await api('POST', '/api/test', { name: $('model').value });
+    toast((res.ok ? '✓ ' : '✗ ') + res.message, !res.ok);
+  } catch (err) { toast('✗ ' + err.message, true); }
+  finally { btn.disabled = false; btn.textContent = 'test'; }
+});
+
+$('s_save').addEventListener('click', async () => {
+  const multi = checkedModels();
+  try {
+    await api('POST', '/api/setup', {
+      name: $('s_name').value || $('s_name').placeholder,
+      provider,
+      baseUrl: $('s_url').value,
+      apiKey: $('s_key').value,
+      model: $('s_model').value,
+      models: multi.length > 1 ? multi : [],
+      depth: $('s_depth').value,
+      makeDefault: setupForced || !editingName,
+    });
+    hideSetup();
+    $('s_key').value = '';
+    $('s_models').classList.remove('show');
+    $('s_models').innerHTML = '';
+    toast(multi.length > 1 ? `${multi.length} models saved — ready to review` : 'Model saved — ready to review');
+    refresh();
+  } catch (err) { toast(err.message, true); }
+});
+
+// --- watch filters (direct-only scope + searchable repo whitelist) ---
+let wfChecked = new Set(); // repos currently allowed
+let wfRepos = [];          // accessible repos fetched from GitHub
+
+function renderRepoList() {
+  const q = $('wf_search').value.trim().toLowerCase();
+  const all = [...new Set([...wfChecked, ...wfRepos])];
+  const rows = all
+    .filter(r => !q || r.toLowerCase().includes(q))
+    .sort((a, b) => (wfChecked.has(b) - wfChecked.has(a)) || a.localeCompare(b));
+  $('wf_list').innerHTML = rows.length
+    ? rows.map(r => `<label><input type="checkbox" value="${esc(r)}" ${wfChecked.has(r) ? 'checked' : ''}> ${esc(r)}</label>`).join('')
+    : '<label style="cursor:default">no repos match</label>';
+}
+$('wf_list').addEventListener('change', e => {
+  if (!e.target.value) return;
+  e.target.checked ? wfChecked.add(e.target.value) : wfChecked.delete(e.target.value);
+});
+$('wf_search').addEventListener('input', renderRepoList);
+$('wf_add').addEventListener('click', () => {
+  const v = $('wf_manual').value.trim();
+  if (!/^[^\/\s]+\/[^\/\s]+$/.test(v)) { toast('expected owner/repo', true); return; }
+  wfChecked.add(v);
+  $('wf_manual').value = '';
+  renderRepoList();
+});
+
+$('wfilterbtn').addEventListener('click', async () => {
+  const w = (lastState && lastState.watch) || {};
+  $('wf_teams').checked = !!w.includeTeams;
+  wfChecked = new Set(w.repos || []);
+  $('wf_search').value = '';
+  $('wfilters').classList.add('show');
+  renderRepoList();
+  if (!wfRepos.length) {
+    $('wf_list').innerHTML = '<label style="cursor:default">loading your repos…</label>';
+    try {
+      const res = await api('GET', '/api/repos');
+      wfRepos = res.repos || [];
+    } catch (err) {
+      toast('could not list repos: ' + err.message, true);
+    }
+    renderRepoList();
+  }
+});
+$('wf_cancel').addEventListener('click', () => $('wfilters').classList.remove('show'));
+$('wf_save').addEventListener('click', async () => {
+  try {
+    await api('POST', '/api/watch/filters', {
+      includeTeams: $('wf_teams').checked,
+      repos: [...wfChecked],
+    });
+    $('wfilters').classList.remove('show');
+    toast('Watch filters saved');
+    refresh();
+  } catch (err) { toast(err.message, true); }
+});
+
+// --- settings: manage profiles, keys, default ---
+function plistHTML(models) {
+  if (!models.length) return '<label style="cursor:default">no model profiles yet</label>';
+  return models.map(m => `<label style="justify-content:space-between;cursor:default">
+    <span style="display:flex;align-items:center;gap:8px;min-width:0">
+      <button class="tbtn" style="border:none;padding:2px 5px;color:${m.default ? 'var(--approve)' : 'var(--dim)'}" title="set as default" onclick="setDefaultModel('${esc(m.name)}')">${m.default ? '●' : '○'}</button>
+      <b style="white-space:nowrap">${esc(m.name)}</b>
+      <span style="color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.provider)} · ${esc(m.model)} · ${m.hasKey ? 'own key' : 'global key'}</span>
+    </span>
+    <span style="display:flex;gap:6px;flex:none">
+      <button class="tbtn" onclick="editProfile('${esc(m.name)}')">edit</button>
+      <button class="tbtn" onclick="deleteProfile('${esc(m.name)}')">delete</button>
+    </span>
+  </label>`).join('');
+}
+function renderSettings() {
+  const models = (lastState && lastState.settings.models) || [];
+  $('plist').innerHTML = plistHTML(models);
+}
+$('settingsbtn').addEventListener('click', () => { renderSettings(); $('settingsov').classList.add('show'); });
+$('st_close').addEventListener('click', () => $('settingsov').classList.remove('show'));
+$('st_add').addEventListener('click', () => { $('settingsov').classList.remove('show'); showSetup(false); });
+
+async function setDefaultModel(name) {
+  userTouchedSettings = 0;
+  try { await api('POST', '/api/settings', { model: name }); await refresh(); renderSettings(); toast('default model → ' + name); }
+  catch (err) { toast(err.message, true); }
+}
+function editProfile(name) {
+  const m = ((lastState && lastState.settings.models) || []).find(x => x.name === name);
+  if (!m) return;
+  $('settingsov').classList.remove('show');
+  showSetup(false, m);
+}
+async function deleteProfile(name) {
+  if (!confirm(`Delete model profile "${name}"? Its stored key is removed too.`)) return;
+  try { await api('DELETE', `/api/profiles/${encodeURIComponent(name)}`); await refresh(); renderSettings(); toast('removed ' + name); }
+  catch (err) { toast(err.message, true); }
+}
+
+// --- job list: status filter + pagination ---
+let lastState = null;
+let curStatus = 'all';
+let curPage = 1;
+const FILTERS = ['all', 'active', 'awaiting', 'posted', 'failed'];
+
+function setFilter(s) { curStatus = s; curPage = 1; refresh(); }
+$('prevpg').addEventListener('click', () => { if (curPage > 1) { curPage--; refresh(); } });
+$('nextpg').addEventListener('click', () => { curPage++; refresh(); });
+
+function tabsHTML(st) {
+  const c = st.jobsCounts || {};
+  const count = f => {
+    if (f === 'all') return st.jobsTotal_all;
+    if (f === 'active') return (c.queued || 0) + (c.running || 0) + (c.awaiting || 0);
+    return c[f] || 0;
+  };
+  return FILTERS.map(f => {
+    const n = count(f);
+    return `<button class="tab ${curStatus === f ? 'on' : ''}" onclick="setFilter('${f}')">${f}${n ? `<span class="n">${n}</span>` : ''}</button>`;
+  }).join('');
+}
+
+function render(st) {
+  lastState = st;
+  $('user').textContent = st.user ? '@' + st.user : '';
+  const active = activeModelInfo(st);
+  $('modelchip').textContent = shortModel(active.model);
+  $('modelchip').title = active.name ? `${active.name} · ${active.model}` : active.model;
+  if (!st.configured && !setupOpen) showSetup(true);
+  if (st.configured && setupForced && setupOpen) { hideSetup(); setupForced = false; }
+  if (Date.now() - userTouchedSettings > 3000) {
+    const sel = $('model');
+    sel.innerHTML = (st.settings.models.length ? st.settings.models : [{name:'', model: st.settings.activeModel, default:true}])
+      .map(m => `<option value="${esc(m.name)}" ${m.default ? 'selected' : ''}>${esc(shortModel(m.model))}</option>`).join('');
+    $('depth').value = st.settings.depth;
+    $('watch').checked = st.watch.enabled;
+    $('autoapprove').checked = st.watch.autoApprove;
+  }
+  const w = st.watch;
+  if (w.enabled) {
+    const scope = w.includeTeams ? 'direct + team requests' : 'direct requests';
+    const repos = (w.repos && w.repos.length) ? ` · repos: ${w.repos.map(esc).join(', ')}` : '';
+    $('watchinfo').innerHTML = `watching ${scope} for @${esc(st.user)} every ${w.intervalSec}s${repos}` +
+      (w.lastError ? ` — <span class="err">${esc(w.lastError)}</span>` : '');
+  } else {
+    $('watchinfo').innerHTML = '';
+  }
+
+  const jobs = st.jobs || [];
+  const totalAll = Object.values(st.jobsCounts || {}).reduce((a, b) => a + b, 0);
+  st.jobsTotal_all = totalAll;
+  $('jobs').innerHTML = jobs.map(jobHTML).join('');
+  $('empty').style.display = totalAll ? 'none' : 'block';
+  $('jobshead').style.display = totalAll ? 'flex' : 'none';
+  $('jobscount').textContent = `Reviews — ${st.jobsTotal}`;
+  $('tabs').innerHTML = totalAll ? tabsHTML(st) : '';
+  const showPager = st.pages > 1;
+  $('pager').style.display = showPager ? 'flex' : 'none';
+  if (showPager) {
+    if (curPage > st.pages) { curPage = st.pages; }
+    $('pginfo').textContent = `page ${st.page} / ${st.pages}`;
+    $('prevpg').disabled = st.page <= 1;
+    $('nextpg').disabled = st.page >= st.pages;
+  }
+}
+
+async function refresh() {
+  try {
+    render(await api('GET', `/api/state?status=${encodeURIComponent(curStatus)}&page=${curPage}&per=10`));
+  } catch (e) { /* server restarting */ }
+}
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const url = $('url').value.trim();
+  if (!url) return;
+  try {
+    const j = await api('POST', '/api/review', { url });
+    open.add(j.id);
+    $('url').value = '';
+    refresh();
+  } catch (err) { toast(err.message, true); }
+});
+
+async function act(id, action) {
+  try { await api('POST', `/api/jobs/${id}/${action}`); refresh(); }
+  catch (err) { toast(err.message, true); }
+}
+async function removeJob(id) {
+  try { await api('DELETE', `/api/jobs/${id}`); open.delete(id); refresh(); }
+  catch (err) { toast(err.message, true); }
+}
+async function post(id, state, nfind) {
+  if (state === 'APPROVE' && nfind > 0 &&
+      !confirm(`${nfind} finding(s) were reported. Approve anyway?`)) return;
+  try { await api('POST', `/api/jobs/${id}/post`, { state }); toast('Review posted: ' + state); refresh(); }
+  catch (err) { toast(err.message, true); }
+}
+function toggleDetail(id) { open.has(id) ? open.delete(id) : open.add(id); refresh(); }
+
+for (const [el, fn] of [
+  ['model', () => $('model').value ? api('POST', '/api/settings', { model: $('model').value }) : Promise.resolve()],
+  ['depth', () => api('POST', '/api/settings', { depth: $('depth').value })],
+  ['watch', () => api('POST', '/api/watch', { enabled: $('watch').checked, autoApprove: $('autoapprove').checked })],
+  ['autoapprove', () => api('POST', '/api/watch', { enabled: $('watch').checked, autoApprove: $('autoapprove').checked })],
+]) {
+  $(el).addEventListener('change', async () => {
+    userTouchedSettings = Date.now();
+    try { await fn(); refresh(); } catch (err) { toast(err.message, true); }
+  });
+}
+
+// --- purge queue ---
+$('purgebtn').addEventListener('click', async () => {
+  if (!confirm('Purge: remove all queued and finished reviews?\n\nRunning and awaiting-decision reviews are kept. Purged queued PRs will not be auto-picked-up again.')) return;
+  try {
+    const res = await api('POST', '/api/purge');
+    toast(`Purged ${res.removed} job(s)`);
+    curPage = 1;
+    refresh();
+  } catch (err) { toast(err.message, true); }
+});
+
+// --- kill switch ---
+let engineOff = false;
+$('offbtn').addEventListener('click', async () => {
+  if (!confirm('HARD STOP: cancel every running review, the queue, watch polling and the watch daemon, then shut the engine down?\n\nNothing more will be posted to GitHub until you run `prreview serve` again.')) return;
+  try { await api('POST', '/api/shutdown'); } catch (e) { /* server is dying — expected */ }
+  engineOff = true;
+  $('halted').classList.add('show');
+});
+
+refresh();
+setInterval(() => { if (!engineOff) refresh(); }, 2000);
+</script>
+</body>
+</html>
